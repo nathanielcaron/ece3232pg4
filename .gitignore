@@ -50,3 +50,17 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Folders
+ece3232_project/ECE3232_Project.X/html/
+ece3232_project/ECE3232_Project.X/nbproject/private/
+ece3232_project/ECE3232_Project.X/nbproject/Package-*.bash
+ece3232_project/ECE3232_Project.X/build/
+ece3232_project/ECE3232_Project.X/nbbuild/
+ece3232_project/ECE3232_Project.X/dist/
+ece3232_project/ECE3232_Project.X/nbdist/
+ece3232_project/ECE3232_Project.X/nbactions.xml
+ece3232_project/ECE3232_Project.X/nb-configuration.xml
+ece3232_project/ECE3232_Project.X/funclist
+ece3232_project/ECE3232_Project.X/nbproject/Makefile-*
+ece3232_project/ECE3232_Project.X/disassembly/
