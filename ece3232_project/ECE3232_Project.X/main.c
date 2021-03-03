@@ -26,9 +26,10 @@
 #pragma config POSCMD = HS              // Primary Oscillator Mode Select bits (HS Crystal Oscillator Mode)
 
 // Global variables
-int DisplayValues[17][8];
+int DisplayValues[8][8];
 long duration = 0;
 int distance = 0;
+int previous_distance = -1;
 
 // Function declarations
 unsigned long pulseInHigh();
@@ -109,14 +110,71 @@ int main(void) {
         // Calculate and output distance in cm
         duration = pulseInHigh();
         distance = duration * 0.034 / 2;
-        // Do something to visualize distance
-        if (distance < 10) {
-            shiftOut(DisplayValues[0]);
-        } else if (distance < 20) {
-            shiftOut(DisplayValues[1]);
-        } else {
-            shiftOut(DisplayValues[2]);
+        
+        // Change note only if different
+        if (distance != previous_distance) {
+            // Visualize notes
+            if (distance >= 10 && distance < 15) {
+                // Display C
+                shiftOut(DisplayValues[3]);
+                SHARP_LED = 0;
+            } else if (distance < 20) {
+                // Display B
+                shiftOut(DisplayValues[2]);
+                SHARP_LED = 0;
+            } else if (distance < 25){
+                // Display A#
+                shiftOut(DisplayValues[1]);
+                SHARP_LED = 1;
+            } else if (distance < 30){
+                // Display A
+                shiftOut(DisplayValues[1]);
+                SHARP_LED = 0;
+            } else if (distance < 35){
+                // Display G#
+                shiftOut(DisplayValues[0]);
+                SHARP_LED = 1;
+            } else if (distance < 40){
+                // Display G
+                shiftOut(DisplayValues[0]);
+                SHARP_LED = 0;
+            } else if (distance < 45){
+                // Display F#
+                shiftOut(DisplayValues[6]);
+                SHARP_LED = 1;
+            } else if (distance < 50){
+                // Display F
+                shiftOut(DisplayValues[6]);
+                SHARP_LED = 0;
+            } else if (distance < 55){
+                // Display E
+                shiftOut(DisplayValues[5]);
+                SHARP_LED = 0;
+            } else if (distance < 60){
+                // Display D#
+                shiftOut(DisplayValues[4]);
+                SHARP_LED = 1;
+            } else if (distance < 65){
+                // Display D
+                shiftOut(DisplayValues[4]);
+                SHARP_LED = 0;
+            } else if (distance < 70){
+                // Display C#
+                shiftOut(DisplayValues[3]);
+                SHARP_LED = 1;
+            } else if (distance < 75){
+                // Display C
+                shiftOut(DisplayValues[3]);
+                SHARP_LED = 0;
+            } else {
+                // Display Nothing
+                shiftOut(DisplayValues[7]);
+                SHARP_LED = 0;
+            }
+            previous_distance = distance;
         }
+
+        __delay_ms(250);
     }
 
     return 0;
@@ -130,12 +188,10 @@ unsigned long pulseInHigh() {
 
     // wait for the pulse to start
 	while (SENSOR_ECHO == 0) {
-        SHARP_LED = 1;
     }
 
     // wait for the pulse to stop
 	while (SENSOR_ECHO == 1) {
-        SHARP_LED = 0;
 		echo_signal_width++;
 	}
 
@@ -143,183 +199,95 @@ unsigned long pulseInHigh() {
 	// to be 20 clock cycles long and have about 16 clocks between the edge
 	// and the start of the loop. There will be some error introduced by
 	// the interrupt handlers.
-	return (echo_signal_width * 21 + 16)*(0.0625);
+	return (echo_signal_width * 12 + 15)*(0.0625);
 }
 
+// Function to initialize the DisplayValues array and seven segment display
 void seven_segment_setup() {
-    // Display 0
+    // Display G (9)
     DisplayValues[0][0] = 1;
-    DisplayValues[0][1] = 1;
+    DisplayValues[0][1] = 0;
     DisplayValues[0][2] = 0;
-    DisplayValues[0][3] = 0;
+    DisplayValues[0][3] = 1;
     DisplayValues[0][4] = 0;
     DisplayValues[0][5] = 0;
     DisplayValues[0][6] = 0;
     DisplayValues[0][7] = 0;
-        
-    // Display 1
+    
+    // Display A
     DisplayValues[1][0] = 1;
-    DisplayValues[1][1] = 1;
-    DisplayValues[1][2] = 1;
-    DisplayValues[1][3] = 1;
+    DisplayValues[1][1] = 0;
+    DisplayValues[1][2] = 0;
+    DisplayValues[1][3] = 0;
     DisplayValues[1][4] = 1;
     DisplayValues[1][5] = 0;
     DisplayValues[1][6] = 0;
-    DisplayValues[1][7] = 1;
+    DisplayValues[1][7] = 0;
     
-    // Display 2
+    // Display B
     DisplayValues[2][0] = 1;
     DisplayValues[2][1] = 0;
-    DisplayValues[2][2] = 1;
+    DisplayValues[2][2] = 0;
     DisplayValues[2][3] = 0;
     DisplayValues[2][4] = 0;
-    DisplayValues[2][5] = 1;
-    DisplayValues[2][6] = 0;
-    DisplayValues[2][7] = 0;
+    DisplayValues[2][5] = 0;
+    DisplayValues[2][6] = 1;
+    DisplayValues[2][7] = 1;
     
-    // Display 3
+    // Display C
     DisplayValues[3][0] = 1;
-    DisplayValues[3][1] = 0;
-    DisplayValues[3][2] = 1;
-    DisplayValues[3][3] = 1;
+    DisplayValues[3][1] = 1;
+    DisplayValues[3][2] = 0;
+    DisplayValues[3][3] = 0;
     DisplayValues[3][4] = 0;
-    DisplayValues[3][5] = 0;
-    DisplayValues[3][6] = 0;
+    DisplayValues[3][5] = 1;
+    DisplayValues[3][6] = 1;
     DisplayValues[3][7] = 0;
     
-    // Display 4
+    // Display D
     DisplayValues[4][0] = 1;
     DisplayValues[4][1] = 0;
-    DisplayValues[4][2] = 0;
-    DisplayValues[4][3] = 1;
-    DisplayValues[4][4] = 1;
+    DisplayValues[4][2] = 1;
+    DisplayValues[4][3] = 0;
+    DisplayValues[4][4] = 0;
     DisplayValues[4][5] = 0;
     DisplayValues[4][6] = 0;
     DisplayValues[4][7] = 1;
     
-    // Display 5
+    // Display E
     DisplayValues[5][0] = 1;
     DisplayValues[5][1] = 0;
     DisplayValues[5][2] = 0;
-    DisplayValues[5][3] = 1;
+    DisplayValues[5][3] = 0;
     DisplayValues[5][4] = 0;
-    DisplayValues[5][5] = 0;
+    DisplayValues[5][5] = 1;
     DisplayValues[5][6] = 1;
     DisplayValues[5][7] = 0;
     
-    // Display 6
+    // Display F
     DisplayValues[6][0] = 1;
     DisplayValues[6][1] = 0;
     DisplayValues[6][2] = 0;
     DisplayValues[6][3] = 0;
-    DisplayValues[6][4] = 0;
-    DisplayValues[6][5] = 0;
+    DisplayValues[6][4] = 1;
+    DisplayValues[6][5] = 1;
     DisplayValues[6][6] = 1;
     DisplayValues[6][7] = 0;
     
-    // Display 7
+    // Display Nothing
     DisplayValues[7][0] = 1;
     DisplayValues[7][1] = 1;
     DisplayValues[7][2] = 1;
     DisplayValues[7][3] = 1;
     DisplayValues[7][4] = 1;
-    DisplayValues[7][5] = 0;
-    DisplayValues[7][6] = 0;
-    DisplayValues[7][7] = 0;
-    
-    // Display 8
-    DisplayValues[8][0] = 1;
-    DisplayValues[8][1] = 0;
-    DisplayValues[8][2] = 0;
-    DisplayValues[8][3] = 0;
-    DisplayValues[8][4] = 0;
-    DisplayValues[8][5] = 0;
-    DisplayValues[8][6] = 0;
-    DisplayValues[8][7] = 0;
-    
-    // Display 9
-    DisplayValues[9][0] = 1;
-    DisplayValues[9][1] = 0;
-    DisplayValues[9][2] = 0;
-    DisplayValues[9][3] = 1;
-    DisplayValues[9][4] = 0;
-    DisplayValues[9][5] = 0;
-    DisplayValues[9][6] = 0;
-    DisplayValues[9][7] = 0;
-    
-    // Display A
-    DisplayValues[10][0] = 1;
-    DisplayValues[10][1] = 0;
-    DisplayValues[10][2] = 0;
-    DisplayValues[10][3] = 0;
-    DisplayValues[10][4] = 1;
-    DisplayValues[10][5] = 0;
-    DisplayValues[10][6] = 0;
-    DisplayValues[10][7] = 0;
-    
-    // Display B
-    DisplayValues[11][0] = 1;
-    DisplayValues[11][1] = 0;
-    DisplayValues[11][2] = 0;
-    DisplayValues[11][3] = 0;
-    DisplayValues[11][4] = 0;
-    DisplayValues[11][5] = 0;
-    DisplayValues[11][6] = 1;
-    DisplayValues[11][7] = 1;
-    
-    // Display C
-    DisplayValues[12][0] = 1;
-    DisplayValues[12][1] = 1;
-    DisplayValues[12][2] = 0;
-    DisplayValues[12][3] = 0;
-    DisplayValues[12][4] = 0;
-    DisplayValues[12][5] = 1;
-    DisplayValues[12][6] = 1;
-    DisplayValues[12][7] = 0;
-    
-    // Display D
-    DisplayValues[13][0] = 1;
-    DisplayValues[13][1] = 0;
-    DisplayValues[13][2] = 1;
-    DisplayValues[13][3] = 0;
-    DisplayValues[13][4] = 0;
-    DisplayValues[13][5] = 0;
-    DisplayValues[13][6] = 0;
-    DisplayValues[13][7] = 1;
-    
-    // Display E
-    DisplayValues[14][0] = 1;
-    DisplayValues[14][1] = 0;
-    DisplayValues[14][2] = 0;
-    DisplayValues[14][3] = 0;
-    DisplayValues[14][4] = 0;
-    DisplayValues[14][5] = 1;
-    DisplayValues[14][6] = 1;
-    DisplayValues[14][7] = 0;
-    
-    // Display F
-    DisplayValues[15][0] = 1;
-    DisplayValues[15][1] = 0;
-    DisplayValues[15][2] = 0;
-    DisplayValues[15][3] = 0;
-    DisplayValues[15][4] = 1;
-    DisplayValues[15][5] = 1;
-    DisplayValues[15][6] = 1;
-    DisplayValues[15][7] = 0;
-    
-    // Display nothing
-    DisplayValues[16][0] = 1;
-    DisplayValues[16][1] = 1;
-    DisplayValues[16][2] = 1;
-    DisplayValues[16][3] = 1;
-    DisplayValues[16][4] = 1;
-    DisplayValues[16][5] = 1;
-    DisplayValues[16][6] = 1;
-    DisplayValues[16][7] = 1;
+    DisplayValues[7][5] = 1;
+    DisplayValues[7][6] = 1;
+    DisplayValues[7][7] = 1;
     
     shiftOut(DisplayValues[16]);
 }
 
+// Function to shift in new value bits
 void shiftOut(int values[]) {
     int i;
     for(i =0; i<8; i++) {
