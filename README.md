@@ -5,3 +5,10 @@ This Project consists of using an HC-SR04 proximity sensor to detect the movemen
 Other inputs and outputs include octave selection buttons, a volume dial, a seven-segment display to visualise the note played and an LED to indicate a sharp note.
 
 The project is meant to be a teaching device for beginners and can double as an instrument.
+
+### Contributors:
+Maxime Boudreau
+Nathaniel Caron
+Sam Hache
+Sahil Saini
+
