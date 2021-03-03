@@ -7,8 +7,8 @@ Other inputs and outputs include octave selection buttons, a volume dial, a seve
 The project is meant to be a teaching device for beginners and can double as an instrument.
 
 ### Contributors:
-Maxime Boudreau
-Nathaniel Caron
-Sam Hache
-Sahil Saini
+#### Maxime Boudreau
+#### Nathaniel Caron
+#### Sam Hache
+#### Sahil Saini
 
