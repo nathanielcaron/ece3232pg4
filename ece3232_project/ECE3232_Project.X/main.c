@@ -5,97 +5,60 @@
  * Created on February 27, 2021, 4:53 PM
  */
 
-// Define constants for common I/O
 #define FCY 16000000UL
 
+// Trigger = MKbus B pin AN = an_2 = RD10
+// Echo = MKbus B pin RST = rst_2 = RD11
 #define SENSOR_TRIGGER LATDbits.LATD10
 #define SENSOR_ECHO PORTDbits.RD11
 
-#define SHARP_LED LATBbits.LATB2
+// Octave LED 1 (Green LED) = MKbus A pin RST = rst_1 = RC7
+// Octave LED 2 (Yellow LED) = MKbus A pin CS = cs_1 = RB2
+#define OCTAVE_LED_1 LATCbits.LATC7
+#define OCTAVE_LED_2 LATBbits.LATB2
 
+// Octave Button 1 = MKbus A pin SCK = sck_1 = RB7
+// Octave Button 2 = MKbus A pin MISO = miso_1 = RB8
+#define OCTAVE_BUTTON_1 LATBbits.LATB7
+#define OCTAVE_BUTTON_2 LATBbits.LATB8
+
+// Volume dial = MKbus A pin AN = an_1 = RC0
+#define VOLUME_DIAL LATCbits.LATC0
+
+// DS = Data Pin = MKbus B pin INT = int_2 = RB15
+// SHCP = Clock pin = MKbus B pin CS = cs_2 = RC3
+// STCP = latch pin = MKbus A pin INT = int_1 = RC14
 #define SHIFT_REG_DATA LATBbits.LATB15
 #define SHIFT_REG_CLOCK LATCbits.LATC3
 #define SHIFT_REG_LATCH LATCbits.LATC14
 
-
 #include "xc.h"
 #include "libpic30.h"
 
-#pragma config ICS = 2                  // set to PGC2/PGD2
-#pragma config FNOSC = PRI              // Oscillator Source Selection (Primary Oscillator (XT, HS, EC))
-#pragma config POSCMD = HS              // Primary Oscillator Mode Select bits (HS Crystal Oscillator Mode)
+#pragma config ICS = 2          // set to PGC2/PGD2
+#pragma config FNOSC = PRI      // Oscillator Source Selection (Primary Oscillator (XT, HS, EC))
+#pragma config POSCMD = HS      // Primary Oscillator Mode Select bits (HS Crystal Oscillator Mode)
 
 // Global variables
 int DisplayValues[8][8];
 long duration = 0;
 int distance = 0;
-int previous_distance = -1;
+char NOTE = 'X';
+char PREVIOUS_NOTE = 'X';
+int isSharp = 0;
 
 // Function declarations
+void pinSetup();
 unsigned long pulseInHigh();
 void seven_segment_setup();
 void shiftOut(int values[]);
+void setCurrentNote(int distance);
 
 int main(void) {
-    /* Proximity sensor setup */
     
-    // Trigger = MKbus B pin AN = an_2 = RD10
-    // Echo = MKbus B pin RST = rst_2 = RD11
-    
-    // LED1 = MKbus B pin CS = cs_2 = RC3
-    // LED2 = MKbus B pin SCK = sck_2 = RC6
-    // LED3 = MKbus B pin MISO = miso_2 = RC2
-
-    // set pin RD10 to an output
-    TRISDbits.TRISD10 = 0;
-    // set pin to digital
-    ANSELDbits.ANSELD10 = 0;
-    // set pin RD11 to an input
-    TRISDbits.TRISD11 = 1;
-    // set pin to digital
-    ANSELDbits.ANSELD11 = 0;
-
-    // set pin RC3 to an output
-    TRISCbits.TRISC3 = 0;
-    // set pin to digital
-    ANSELCbits.ANSELC3 = 0;
-    // set pin RC6 to an output
-    TRISCbits.TRISC6 = 0;
-    // set pin to digital
-    ANSELCbits.ANSELC6 = 0;
-    // set pin RC2 to an output
-    TRISCbits.TRISC2 = 0;
-    // set pin to digital
-    ANSELCbits.ANSELC2 = 0;
-    
-    /* Proximity sensor setup */
-
-    // DS = Data Pin = MKbus B pin INT = int_2 = RB15
-    // SHCP = Clock pin = MKbus B pin CS = cs_2 = RC3
-    // STCP = latch pin = MKbus A pin INT = int_1 = RC14
-    // Sharp LED = MKbus A pin CS = cs_1 = RB2
-
-    // set pin int_2 to an output
-    TRISBbits.TRISB15 = 0; 
-    // set pin int_2 to an output
-    TRISCbits.TRISC3 = 0;
-    // set pin int_1 to an output
-    TRISCbits.TRISC14 = 0;
-    // set pin cs_1 to an output
-    TRISBbits.TRISB2 = 0;
+    pinSetup();
     
     seven_segment_setup();
-
-//    int i;
-//    for(i=0; i<16; i++) {
-//        shiftOut(DisplayValues[i]);
-//        // turn on LED
-//        LATBbits.LATB2 = 1;
-//        __delay_ms(500);
-//        // turn off LED
-//        LATBbits.LATB2 = 0;
-//        __delay_ms(500);
-//    }
 
     while(1) {
         // Clear trigger pin
@@ -110,74 +73,122 @@ int main(void) {
         // Calculate and output distance in cm
         duration = pulseInHigh();
         distance = duration * 0.034 / 2;
+
+        setCurrentNote(distance);
         
         // Change note only if different
-        if (distance != previous_distance) {
+        if (NOTE != PREVIOUS_NOTE) {
             // Visualize notes
             if (distance >= 10 && distance < 15) {
                 // Display C
                 shiftOut(DisplayValues[3]);
-                SHARP_LED = 0;
             } else if (distance < 20) {
                 // Display B
                 shiftOut(DisplayValues[2]);
-                SHARP_LED = 0;
             } else if (distance < 25){
                 // Display A#
                 shiftOut(DisplayValues[1]);
-                SHARP_LED = 1;
             } else if (distance < 30){
                 // Display A
                 shiftOut(DisplayValues[1]);
-                SHARP_LED = 0;
             } else if (distance < 35){
                 // Display G#
                 shiftOut(DisplayValues[0]);
-                SHARP_LED = 1;
             } else if (distance < 40){
                 // Display G
                 shiftOut(DisplayValues[0]);
-                SHARP_LED = 0;
             } else if (distance < 45){
                 // Display F#
                 shiftOut(DisplayValues[6]);
-                SHARP_LED = 1;
             } else if (distance < 50){
                 // Display F
                 shiftOut(DisplayValues[6]);
-                SHARP_LED = 0;
             } else if (distance < 55){
                 // Display E
                 shiftOut(DisplayValues[5]);
-                SHARP_LED = 0;
             } else if (distance < 60){
                 // Display D#
                 shiftOut(DisplayValues[4]);
-                SHARP_LED = 1;
             } else if (distance < 65){
                 // Display D
                 shiftOut(DisplayValues[4]);
-                SHARP_LED = 0;
             } else if (distance < 70){
                 // Display C#
                 shiftOut(DisplayValues[3]);
-                SHARP_LED = 1;
             } else if (distance < 75){
                 // Display C
                 shiftOut(DisplayValues[3]);
-                SHARP_LED = 0;
             } else {
                 // Display Nothing
                 shiftOut(DisplayValues[7]);
-                SHARP_LED = 0;
             }
-            previous_distance = distance;
+            PREVIOUS_NOTE = NOTE;
         }
 
         __delay_ms(250);
     }
 
     return 0;
+}
+
+void pinSetup() {
+    /* Setup Proximity sensor pins */
+    // set pin RD10 to an output
+    TRISDbits.TRISD10 = 0;
+    // set pin to digital
+    ANSELDbits.ANSELD10 = 0;
+    // set pin RD11 to an input
+    TRISDbits.TRISD11 = 1;
+    // set pin to digital
+    ANSELDbits.ANSELD11 = 0;
+    
+    /* Setup Octave LED pins */
+    // set pin rst_1 to an output
+    TRISCbits.TRISC7 = 0;
+    // set pin cs_1 to an output
+    TRISBbits.TRISB2 = 0;
+    
+    /* Setup Octave Button pins */
+    // set pin sck_1 to an input
+    TRISBbits.TRISB7 = 1;
+    // set pin miso_1 to an input
+    TRISBbits.TRISB8 = 1;
+    
+    /* Setup Volume dial pins */
+    // set pin sck_1 to an input
+    TRISCbits.TRISC0 = 1;
+    // set pin to analog
+    ANSELCbits.ANSELC0 = 1;
+
+    /* Setup Shift Register pins */
+    // set pin int_2 to an output
+    TRISBbits.TRISB15 = 0; 
+    // set pin int_2 to an output
+    TRISCbits.TRISC3 = 0;
+    // set pin int_1 to an output
+    TRISCbits.TRISC14 = 0;
+}
+
+void setCurrentNote(int distance) {
+    if (distance >= 10 && distance < 15) {
+        NOTE = 'C';
+    } else if (distance < 20) {
+        NOTE = 'B';
+    } else if (distance < 30){
+        NOTE = 'A';
+    } else if (distance < 40){
+        NOTE = 'G';
+    } else if (distance < 50){
+        NOTE = 'F';
+    } else if (distance < 55){
+        NOTE = 'E';
+    } else if (distance < 65){
+        NOTE = 'D';
+    } else if (distance < 75){
+        NOTE = 'C';
+    } else {
+        NOTE = 'X';
+    }
 }
 
 unsigned long pulseInHigh() {
