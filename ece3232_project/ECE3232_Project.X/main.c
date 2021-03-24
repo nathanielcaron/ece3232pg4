@@ -1,10 +1,8 @@
 /*
  * File:   main.c
- * Author: Nathaniel Caron
- *
- * Created on February 27, 2021, 4:53 PM
  */
 
+// Define FCY for system
 #define FCY 16000000UL
 
 // Trigger = MKbus B pin AN = an_2 = RD10
@@ -17,13 +15,13 @@
 #define OCTAVE_LED_1 LATCbits.LATC7
 #define OCTAVE_LED_2 LATBbits.LATB2
 
-// Octave Button 1 = MKbus A pin SCK = sck_1 = RB7
-// Octave Button 2 = MKbus A pin MISO = miso_1 = RB8
-#define OCTAVE_BUTTON_1 LATBbits.LATB7
-#define OCTAVE_BUTTON_2 LATBbits.LATB8
+// Octave Button 1 (Green Button) = MKbus A pin SCK = sck_1 = RB7
+// Octave Button 2 (Yellow Button) = MKbus A pin MISO = miso_1 = RB8
+#define OCTAVE_BUTTON_1 PORTBbits.RB7
+#define OCTAVE_BUTTON_2 PORTBbits.RB8
 
 // Volume dial = MKbus A pin AN = an_1 = RC0
-#define VOLUME_DIAL LATCbits.LATC0
+#define VOLUME_DIAL PORTCbits.RC0
 
 // DS = Data Pin = MKbus B pin INT = int_2 = RB15
 // SHCP = Clock pin = MKbus B pin CS = cs_2 = RC3
@@ -41,91 +39,119 @@
 
 // Global variables
 int DisplayValues[8][8];
-long duration = 0;
-int distance = 0;
+unsigned long distance = 0;
+unsigned long duration = 0;
 char NOTE = 'X';
 char PREVIOUS_NOTE = 'X';
-int isSharp = 0;
+int octave = 0;
 
 // Function declarations
 void pinSetup();
+void setCurrentNote();
 unsigned long pulseInHigh();
 void seven_segment_setup();
 void shiftOut(int values[]);
-void setCurrentNote(int distance);
+void WriteUART(char value);
 
 int main(void) {
-    
+    // Setup all I/O pins
     pinSetup();
     
+    // Setup 7-segment display
     seven_segment_setup();
+    
+    /** TESTS */
+    
+    OCTAVE_LED_1 = 1;
+    OCTAVE_LED_2 = 1;
+
+    int i;
+    for (i = 0; i < 8; i++) {
+        shiftOut(DisplayValues[i]);
+        __delay_ms(500);
+    }
+    
+    /** TESTS */
 
     while(1) {
-        // Clear trigger pin
-        SENSOR_TRIGGER = 0;
-        __delay_us(2);
-    
-        // Produce sound wave
-        SENSOR_TRIGGER = 1;
-        __delay_us(10);
-        SENSOR_TRIGGER = 0;
         
-        // Calculate and output distance in cm
-        duration = pulseInHigh();
-        distance = duration * 0.034 / 2;
+        if (OCTAVE_BUTTON_1 == 0 || OCTAVE_BUTTON_2 == 0) {
+            if (OCTAVE_BUTTON_1 == 0) {
+                // Octave 1 selected
+                octave = 1;
+                OCTAVE_LED_1 = 1;
+                OCTAVE_LED_2 = 0;
+            } else if (OCTAVE_BUTTON_2 == 0) {
+                // Octave 2 selected
+                octave = 2;
+                OCTAVE_LED_1 = 0;
+                OCTAVE_LED_2 = 1;
+            }
 
-        setCurrentNote(distance);
-        
-        // Change note only if different
-        if (NOTE != PREVIOUS_NOTE) {
+            /* \/\/\/ Get distance reading from sensor \/\/\/ */
+
+            // Clear trigger pin
+            SENSOR_TRIGGER = 0;
+            __delay_us(2);
+
+            // Produce sound wave
+            SENSOR_TRIGGER = 1;
+            __delay_us(10);
+            SENSOR_TRIGGER = 0;
+
+            // Calculate and output distance in cm
+            duration = pulseInHigh();
+            distance = ((duration * 0.034) / 2);
+
+            // Distance slope error correction (The sensor reading is increasingly inaccurate)
+            distance = distance + (distance*0.1);
+
+            /* /\/\/\ Get distance reading from sensor /\/\/\ */
+
+            setCurrentNote();
+
             // Visualize notes
-            if (distance >= 10 && distance < 15) {
+            if (NOTE == 'C') {
                 // Display C
                 shiftOut(DisplayValues[3]);
-            } else if (distance < 20) {
+            } else if (NOTE == 'B') {
                 // Display B
                 shiftOut(DisplayValues[2]);
-            } else if (distance < 25){
-                // Display A#
-                shiftOut(DisplayValues[1]);
-            } else if (distance < 30){
+            } else if (NOTE == 'A'){
                 // Display A
                 shiftOut(DisplayValues[1]);
-            } else if (distance < 35){
-                // Display G#
-                shiftOut(DisplayValues[0]);
-            } else if (distance < 40){
+            } else if (NOTE == 'G'){
                 // Display G
                 shiftOut(DisplayValues[0]);
-            } else if (distance < 45){
-                // Display F#
-                shiftOut(DisplayValues[6]);
-            } else if (distance < 50){
+            } else if (NOTE == 'F'){
                 // Display F
                 shiftOut(DisplayValues[6]);
-            } else if (distance < 55){
+            } else if (NOTE == 'E'){
                 // Display E
                 shiftOut(DisplayValues[5]);
-            } else if (distance < 60){
-                // Display D#
-                shiftOut(DisplayValues[4]);
-            } else if (distance < 65){
+            } else if (NOTE == 'D'){
                 // Display D
                 shiftOut(DisplayValues[4]);
-            } else if (distance < 70){
-                // Display C#
-                shiftOut(DisplayValues[3]);
-            } else if (distance < 75){
-                // Display C
-                shiftOut(DisplayValues[3]);
             } else {
                 // Display Nothing
                 shiftOut(DisplayValues[7]);
             }
-            PREVIOUS_NOTE = NOTE;
-        }
+            
+            // Send Note over UART
+            if (NOTE != 'X') {
+                WriteUART(NOTE);
+            }
+            WriteUART('\n');
 
-        __delay_ms(250);
+            PREVIOUS_NOTE = NOTE;
+
+        } else {
+            octave = 0;
+            // Display Nothing
+            shiftOut(DisplayValues[7]);
+            OCTAVE_LED_1 = 0;
+            OCTAVE_LED_2 = 0;
+        }
     }
 
     return 0;
@@ -145,14 +171,22 @@ void pinSetup() {
     /* Setup Octave LED pins */
     // set pin rst_1 to an output
     TRISCbits.TRISC7 = 0;
+    // set pin to digital
+    ANSELCbits.ANSELC7 = 0;
     // set pin cs_1 to an output
     TRISBbits.TRISB2 = 0;
+    // set pin to digital
+    ANSELBbits.ANSELB2 = 0;
     
     /* Setup Octave Button pins */
     // set pin sck_1 to an input
     TRISBbits.TRISB7 = 1;
+    // set pin to digital
+    ANSELBbits.ANSELB7 = 0;
     // set pin miso_1 to an input
     TRISBbits.TRISB8 = 1;
+    // set pin to digital
+    ANSELBbits.ANSELB8 = 0;
     
     /* Setup Volume dial pins */
     // set pin sck_1 to an input
@@ -167,32 +201,45 @@ void pinSetup() {
     TRISCbits.TRISC3 = 0;
     // set pin int_1 to an output
     TRISCbits.TRISC14 = 0;
+    
+    // UART Setup (115200 baud rate)
+    TRISBbits.TRISB13 = 0;      // Setting the TX_2 to output
+    
+    RPOR6bits.RP45R = 1;        // Setting TX_2 pin to UART1 Transmit
+    U1MODEbits.UARTEN = 1;      // UART Enable bit
+    U1MODEHbits.BCLKSEL = 0;    // Baud Clock Source Selection bits
+    U1MODEbits.BRGH = 1;        // High Baud Rate Select Bit
+    U1BRGbits.BRG = 34;         // Setting the baud clock to 115200
+    U1MODEHbits.BCLKMOD = 0;    // Setting it to legacy mode
+
+    U1MODEbits.MOD = 0;         // UART Mode bits -- Asynchronous 8-bit UART No parity bit
 }
 
-void setCurrentNote(int distance) {
-    if (distance >= 10 && distance < 15) {
+void setCurrentNote() {
+    if (distance < 15) {
         NOTE = 'C';
     } else if (distance < 20) {
         NOTE = 'B';
-    } else if (distance < 30){
+    } else if (distance < 25){
         NOTE = 'A';
-    } else if (distance < 40){
+    } else if (distance < 30){
         NOTE = 'G';
-    } else if (distance < 50){
+    } else if (distance < 35){
         NOTE = 'F';
-    } else if (distance < 55){
+    } else if (distance < 40){
         NOTE = 'E';
-    } else if (distance < 65){
+    } else if (distance < 45){
         NOTE = 'D';
-    } else if (distance < 75){
+    } else if (distance < 50){
         NOTE = 'C';
     } else {
+        // Invalid note
         NOTE = 'X';
     }
 }
 
 unsigned long pulseInHigh() {
-	unsigned long echo_signal_width = 0; // keep initialization out of time critical area
+	unsigned long echo_signal_width = 0;
 
 	// wait for any previous pulse to end
 	while (SENSOR_ECHO == 1) {}
@@ -206,10 +253,7 @@ unsigned long pulseInHigh() {
 		echo_signal_width++;
 	}
 
-    // convert the reading to microseconds. The loop has been determined
-	// to be 20 clock cycles long and have about 16 clocks between the edge
-	// and the start of the loop. There will be some error introduced by
-	// the interrupt handlers.
+    // convert the reading to microseconds.
 	return (echo_signal_width * 12 + 15)*(0.0625);
 }
 
@@ -295,7 +339,8 @@ void seven_segment_setup() {
     DisplayValues[7][6] = 1;
     DisplayValues[7][7] = 1;
     
-    shiftOut(DisplayValues[16]);
+    // Display Nothing
+    shiftOut(DisplayValues[7]);
 }
 
 // Function to shift in new value bits
@@ -315,4 +360,10 @@ void shiftOut(int values[]) {
     SHIFT_REG_LATCH = 1;
     __delay_us(500);
     SHIFT_REG_LATCH = 0;
+}
+
+void WriteUART(char value) {
+    U1MODEbits.UTXEN = 0; 
+    U1TXREGbits.TXREG = value;
+    U1MODEbits.UTXEN = 1;
 }
