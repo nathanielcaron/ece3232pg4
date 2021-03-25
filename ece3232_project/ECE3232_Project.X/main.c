@@ -1,5 +1,11 @@
 /*
  * File:   main.c
+ * 
+ * Group 4:
+ * Maxime Boudreau
+ * Nathaniel Caron
+ * Sam Hache
+ * Sahil Saini
  */
 
 // Define FCY for system
@@ -32,6 +38,7 @@
 
 #include "xc.h"
 #include "libpic30.h"
+#include "math.h"
 
 #pragma config ICS = 2          // set to PGC2/PGD2
 #pragma config FNOSC = PRI      // Oscillator Source Selection (Primary Oscillator (XT, HS, EC))
@@ -43,15 +50,35 @@ unsigned long distance = 0;
 unsigned long duration = 0;
 char NOTE = 'X';
 char PREVIOUS_NOTE = 'X';
-int octave = 0;
+int OCTAVE = 0;
+int VOLUME = 1;
+int NOTE_DURATION = 1;
+int sine[] = {
+1843,1958,2073,2188,2301,2412,2521,2627,
+2730,2830,2925,3017,3104,3186,3262,3333,
+3398,3457,3510,3556,3595,3627,3652,3670,
+3681,3685,3681,3670,3652,3627,3595,3556,
+3510,3457,3398,3333,3262,3186,3104,3017,
+2925,2830,2730,2627,2521,2412,2301,2188,
+2073,1958,1843,1727,1612,1497,1384,1273,
+1164,1058,955,855,760,668,581,499,
+423,352,287,228,175,129,90,58,
+33,15,4,0,4,15,33,58,
+90,129,175,228,287,352,423,499,
+581,668,760,855,955,1058,1164,1273,
+1384,1497,1612,1727,1843
+}; // size 100
 
-// Function declarations
+// Function templates
 void pinSetup();
 void setCurrentNote();
 unsigned long pulseInHigh();
 void seven_segment_setup();
 void shiftOut(int values[]);
 void WriteUART(char value);
+void make_note(void);
+void set_timer(void);
+void play_melody(void);
 
 int main(void) {
     // Setup all I/O pins
@@ -71,6 +98,14 @@ int main(void) {
         __delay_ms(500);
     }
     
+    OCTAVE_LED_1 = 0;
+    OCTAVE_LED_2 = 0;
+    
+    // Timer setup code
+    // LATCbits.LATC14 = 0;
+    // set the timer - this will also go in main or while(1) loop)
+    // set_timer();
+
     /** TESTS */
 
     while(1) {
@@ -78,12 +113,12 @@ int main(void) {
         if (OCTAVE_BUTTON_1 == 0 || OCTAVE_BUTTON_2 == 0) {
             if (OCTAVE_BUTTON_1 == 0) {
                 // Octave 1 selected
-                octave = 1;
+                OCTAVE = 1;
                 OCTAVE_LED_1 = 1;
                 OCTAVE_LED_2 = 0;
             } else if (OCTAVE_BUTTON_2 == 0) {
                 // Octave 2 selected
-                octave = 2;
+                OCTAVE = 2;
                 OCTAVE_LED_1 = 0;
                 OCTAVE_LED_2 = 1;
             }
@@ -142,11 +177,14 @@ int main(void) {
                 WriteUART(NOTE);
             }
             WriteUART('\n');
+            
+            // play note on speaker
+            make_note();
 
             PREVIOUS_NOTE = NOTE;
 
         } else {
-            octave = 0;
+            OCTAVE = 0;
             // Display Nothing
             shiftOut(DisplayValues[7]);
             OCTAVE_LED_1 = 0;
@@ -203,18 +241,55 @@ void pinSetup() {
     TRISCbits.TRISC14 = 0;
     
     // UART Setup (115200 baud rate)
-    TRISBbits.TRISB13 = 0;      // Setting the TX_2 to output
+    // Setting the TX_2 to output
+    TRISBbits.TRISB13 = 0;
+    // Setting TX_2 pin to UART1 Transmit
+    RPOR6bits.RP45R = 1;
+    // UART Enable bit
+    U1MODEbits.UARTEN = 1;
+    // Baud Clock Source Selection bits
+    U1MODEHbits.BCLKSEL = 0;
+    // High Baud Rate Select Bit
+    U1MODEbits.BRGH = 1;
+    // Setting the baud clock to 115200
+    U1BRGbits.BRG = 34;
+    // Setting it to legacy mode
+    U1MODEHbits.BCLKMOD = 0;
+    // UART Mode bits -- Asynchronous 8-bit UART No parity bit
+    U1MODEbits.MOD = 0;
     
-    RPOR6bits.RP45R = 1;        // Setting TX_2 pin to UART1 Transmit
-    U1MODEbits.UARTEN = 1;      // UART Enable bit
-    U1MODEHbits.BCLKSEL = 0;    // Baud Clock Source Selection bits
-    U1MODEbits.BRGH = 1;        // High Baud Rate Select Bit
-    U1BRGbits.BRG = 34;         // Setting the baud clock to 115200
-    U1MODEHbits.BCLKMOD = 0;    // Setting it to legacy mode
-
-    U1MODEbits.MOD = 0;         // UART Mode bits -- Asynchronous 8-bit UART No parity bit
+    // setting registers for speaker
+    // set pin RD15 to an output - spk_enable = output
+    TRISDbits.TRISD15 = 0;
+    // A3 is speaker output
+    TRISAbits.TRISA3 = 0;
+    // enable speaker
+    LATDbits.LATD15 = 1;
+    // Enable DAC modules
+    DACCTRL1Lbits.DACON = 1;
+    //set clock for DAC, 2 for PLL
+    DACCTRL1Lbits.CLKSEL = 11;
+    //set no division for clock
+    DACCTRL1Lbits.CLKDIV = 00;
+    // Enable DAC 1
+    DAC1CONLbits.DACEN = 1;
+    // Enable DAC 1 output buffer
+    DAC1CONLbits.DACOEN = 1;
+    
+    // Setup MCCP timer
+    // select the Time Base/Output Compare mode of the module
+    CCP1CON1Lbits.CCSEL = 0;
+    // 32-bit time base operation
+    CCP1CON1Lbits.T32 = 1;
+    // timer mode
+    CCP1CON1Lbits.MOD = 0;
+    // Set the clock source (Tcy)
+    CCP1CON1Lbits.CLKSEL = 0;
+    // enable timer module
+    CCP1CON1Hbits.SYNC = 0;
 }
 
+// Convert the distance in cm to a music note
 void setCurrentNote() {
     if (distance < 15) {
         NOTE = 'C';
@@ -366,4 +441,101 @@ void WriteUART(char value) {
     U1MODEbits.UTXEN = 0; 
     U1TXREGbits.TXREG = value;
     U1MODEbits.UTXEN = 1;
+}
+
+
+/** 
+ * Function for playing note to speaker - *FCY must be 16 Mhz*, this function
+ * requires the following global variables:
+ * int volume - volume control as integer value
+ * int duration - time duration in units seconds or inverse seconds. Use seconds
+ * for duration > 1 second, inverse seconds for duration < 1 second. More
+ * instructions for the duration are found below (by int x instruction)
+ * char note - note character to be played. 'C' is lower C note, 'c' is higher c
+ * note
+ * int octave - octave 1 (lower pitch), octave 2 (higher pitch)
+*/
+void make_note(void){
+    // clock cycles for note frequencies for octave 1 - whole notes (C,D,E,F,G,A,B,C)
+    // Calculated by: f = 16Mhz/(100*cycles)
+    int notes[] = {1224, 1090, 971, 917, 817, 728, 648, 612};
+    int cycles;
+    // get frequency for note
+    if (NOTE == 'C') cycles = notes[0];
+    if (NOTE == 'D') cycles = notes[1];
+    if (NOTE == 'E') cycles = notes[2];
+    if (NOTE == 'F') cycles = notes[3];
+    if (NOTE == 'G') cycles = notes[4];
+    if (NOTE == 'A') cycles = notes[5];
+    if (NOTE == 'B') cycles = notes[6];
+    if (NOTE == 'c') cycles = notes[7];
+    if (NOTE == 'X') return;
+    
+    // calculate duration (number of while loop iterations)
+    // x is loop iterations to play note for duration, x = duration*note_frequency
+    // normally, would say x = duration*16Mhz/(100*cycles), but dsPIC is 16-bit, so
+    // cannot do operations on numbers greater than 65535. So broke up into 2 lines.
+    int x = 16000/cycles;
+    
+    // if duration > 1 second, change '/' to '*', if '/' is used, will play note for
+    // 1/duration seconds, if '*' used, will play for 'duration' seconds
+    x = OCTAVE*x*10/NOTE_DURATION;
+    int count = 0; // count iterations
+    int i = 0; // count for for-loop (sine values)
+    while(count <= x){
+        for (i = 0; i<=99; i++){
+         DAC1DATHbits.DACDATH = (sine[i]/VOLUME)+205;
+        // argument of delay is cycles, f = 16Mhz/(100*cycles), the {-50} is a
+        // correction factor to account for the clock cycles for all instructions
+        // in the loop, and is subject to change if any instructions in loop change. 
+        // Octave is either 1 or 2, dividing cycles by 2 in delay
+        // function doubles the frequency.
+         __delay32(cycles/OCTAVE-50); 
+        } // end for
+        i = 0;
+        count++;
+    } // end while 1
+}
+
+void __attribute__((interrupt, auto_psv)) _CCT1Interrupt(void){
+// CCT1 ISR
+    _CCT1IF = 0; // interrupt flag cleared
+    CCP1CON1Lbits.CCPON = 0; // turn off timer
+    play_melody(); // play note
+    LATCbits.LATC14 = 1; // turn LED on
+    __delay_ms(1000); // delay 1 second
+}
+
+void set_timer(void){
+    // 10 second timer - 16e6/16MHz = 10 seconds
+    CCP1PRL = 0x0989; // high bits
+    CCP1PRH = 0x6800; // low bits
+    _CCT1IE = 1; // enable timer interrupt
+    CCP1CON1Lbits.CCPON = 1; // enable timer module
+}
+
+void play_melody(void){
+    char temp = NOTE; // saving current note
+    int temp2 = OCTAVE; // saving current octave value
+    OCTAVE = 2;
+    NOTE = 'C';
+    make_note();
+    NOTE = 'D';
+    make_note();
+    NOTE = 'E';
+    make_note();
+    NOTE = 'F';
+    make_note();
+    NOTE = 'G';
+    make_note();
+    NOTE = 'A';
+    make_note();
+    NOTE = 'B';
+    make_note();
+    NOTE = 'c';
+    make_note();
+    
+    // housekeeping
+    NOTE = temp;
+    OCTAVE = temp2;
 }
