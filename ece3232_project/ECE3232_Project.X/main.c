@@ -45,13 +45,13 @@
 #pragma config POSCMD = HS      // Primary Oscillator Mode Select bits (HS Crystal Oscillator Mode)
 
 // Global variables
-int DisplayValues[8][8];
+int DisplayValues[9][8];
 unsigned long distance = 0;
 unsigned long duration = 0;
 char NOTE = 'X';
 char PREVIOUS_NOTE = 'X';
 int OCTAVE = 0;
-int VOLUME = 1;
+int VOLUME_DIVIDER = 1;
 int NOTE_DURATION = 1;
 int sine[] = {
 1843,1958,2073,2188,2301,2412,2521,2627,
@@ -87,26 +87,8 @@ int main(void) {
     // Setup 7-segment display
     seven_segment_setup();
     
-    /** TESTS */
-    
-    OCTAVE_LED_1 = 1;
-    OCTAVE_LED_2 = 1;
-
-    int i;
-    for (i = 0; i < 8; i++) {
-        shiftOut(DisplayValues[i]);
-        __delay_ms(500);
-    }
-    
-    OCTAVE_LED_1 = 0;
-    OCTAVE_LED_2 = 0;
-    
-    // Timer setup code
-    // LATCbits.LATC14 = 0;
-    // set the timer - this will also go in main or while(1) loop)
-    // set_timer();
-
-    /** TESTS */
+    // Set timer for no user action
+    set_timer();
 
     while(1) {
         
@@ -167,9 +149,12 @@ int main(void) {
             } else if (NOTE == 'D'){
                 // Display D
                 shiftOut(DisplayValues[4]);
+            } else if (NOTE == 'c') {
+                // Display c
+                shiftOut(DisplayValues[7]);
             } else {
                 // Display Nothing
-                shiftOut(DisplayValues[7]);
+                shiftOut(DisplayValues[8]);
             }
             
             // Send Note over UART
@@ -178,15 +163,23 @@ int main(void) {
             }
             WriteUART('\n');
             
-            // play note on speaker
-            make_note();
+            // Do not play note if volume is 0
+            if (VOLUME_DIVIDER != 0) {
+                // play note on speaker
+                make_note();
+            }
 
             PREVIOUS_NOTE = NOTE;
+            
+            // Reset timer for no user action
+            set_timer();
 
         } else {
+            // Play nothing
+            NOTE = 'X';
             OCTAVE = 0;
             // Display Nothing
-            shiftOut(DisplayValues[7]);
+            shiftOut(DisplayValues[8]);
             OCTAVE_LED_1 = 0;
             OCTAVE_LED_2 = 0;
         }
@@ -287,26 +280,59 @@ void pinSetup() {
     CCP1CON1Lbits.CLKSEL = 0;
     // enable timer module
     CCP1CON1Hbits.SYNC = 0;
+    
+    //Setup ADC channel for an_1 pin
+    //provide max time for initialization
+    ADCON5Hbits.WARMTIME = 15; 
+    //enable ADC
+    ADCON1Lbits.ADON = 1;
+    //turning on shared core module power
+    ADCON5Lbits.SHRPWR = 1;
+    while(ADCON5Lbits.SHRRDY == 0);
+    ADCON3Hbits.SHREN = 1;
+    // set port C0 as input
+    TRISCbits.TRISC0 = 1;
+    //set port C0 as analog
+    ANSELCbits.ANSELC0 = 1;
+    //set clock selection 
+    ADCON3Hbits.CLKSEL = 0;
+    ADCON3Hbits.CLKDIV = 0;
+    //clock period (2 clock cycle)
+    ADCON2Lbits.SHRADCS = 0;
+    //reference select
+    ADCON3Lbits.REFSEL = 0;
+    //resolution of 12 bits
+    ADCON1Hbits.SHRRES = 2;
+    //integer output
+    ADCON1Hbits.FORM = 0;
+    //sample time selection
+    ADCON2Hbits.SHRSAMC = 6;
+    //ADC interrupts setup
+    ADIELbits.IE12 = 1;
+    _ADCAN12IF = 0;
+    _ADCAN12IE = 1;
+    ADCON3Lbits.CNVCHSEL = 12;
+    ADCON3Lbits.SHRSAMP = 1;
 }
 
-// Convert the distance in cm to a music note
+// Convert the distance in cm to a music note (Scale: C, D, E, F, G, A, B, c)
 void setCurrentNote() {
     if (distance < 15) {
         NOTE = 'C';
     } else if (distance < 20) {
-        NOTE = 'B';
-    } else if (distance < 25){
-        NOTE = 'A';
-    } else if (distance < 30){
-        NOTE = 'G';
-    } else if (distance < 35){
-        NOTE = 'F';
-    } else if (distance < 40){
-        NOTE = 'E';
-    } else if (distance < 45){
         NOTE = 'D';
+    } else if (distance < 25){
+        NOTE = 'E';
+    } else if (distance < 30){
+        NOTE = 'F';
+    } else if (distance < 35){
+        NOTE = 'G';
+    } else if (distance < 40){
+        NOTE = 'A';
+    } else if (distance < 45){
+        NOTE = 'B';
     } else if (distance < 50){
-        NOTE = 'C';
+        NOTE = 'c';
     } else {
         // Invalid note
         NOTE = 'X';
@@ -404,18 +430,28 @@ void seven_segment_setup() {
     DisplayValues[6][6] = 1;
     DisplayValues[6][7] = 0;
     
-    // Display Nothing
+    // Display c (lower case)
     DisplayValues[7][0] = 1;
-    DisplayValues[7][1] = 1;
+    DisplayValues[7][1] = 0;
     DisplayValues[7][2] = 1;
-    DisplayValues[7][3] = 1;
-    DisplayValues[7][4] = 1;
+    DisplayValues[7][3] = 0;
+    DisplayValues[7][4] = 0;
     DisplayValues[7][5] = 1;
     DisplayValues[7][6] = 1;
     DisplayValues[7][7] = 1;
     
     // Display Nothing
-    shiftOut(DisplayValues[7]);
+    DisplayValues[8][0] = 1;
+    DisplayValues[8][1] = 1;
+    DisplayValues[8][2] = 1;
+    DisplayValues[8][3] = 1;
+    DisplayValues[8][4] = 1;
+    DisplayValues[8][5] = 1;
+    DisplayValues[8][6] = 1;
+    DisplayValues[8][7] = 1;
+    
+    // Display Nothing
+    shiftOut(DisplayValues[8]);
 }
 
 // Function to shift in new value bits
@@ -456,6 +492,9 @@ void WriteUART(char value) {
  * int octave - octave 1 (lower pitch), octave 2 (higher pitch)
 */
 void make_note(void){
+    // Do not play note if volume is 0
+    if (VOLUME_DIVIDER == 0) return;
+    
     // clock cycles for note frequencies for octave 1 - whole notes (C,D,E,F,G,A,B,C)
     // Calculated by: f = 16Mhz/(100*cycles)
     int notes[] = {1224, 1090, 971, 917, 817, 728, 648, 612};
@@ -482,9 +521,11 @@ void make_note(void){
     x = OCTAVE*x*10/NOTE_DURATION;
     int count = 0; // count iterations
     int i = 0; // count for for-loop (sine values)
+    // uncomment this line for ADC channel use
+    ADCON3Lbits.CNVRTCH = 1;
     while(count <= x){
         for (i = 0; i<=99; i++){
-         DAC1DATHbits.DACDATH = (sine[i]/VOLUME)+205;
+         DAC1DATHbits.DACDATH = (sine[i]/VOLUME_DIVIDER)+205;
         // argument of delay is cycles, f = 16Mhz/(100*cycles), the {-50} is a
         // correction factor to account for the clock cycles for all instructions
         // in the loop, and is subject to change if any instructions in loop change. 
@@ -498,18 +539,19 @@ void make_note(void){
 }
 
 void __attribute__((interrupt, auto_psv)) _CCT1Interrupt(void){
-// CCT1 ISR
+    // CCT1 ISR
     _CCT1IF = 0; // interrupt flag cleared
     CCP1CON1Lbits.CCPON = 0; // turn off timer
-    play_melody(); // play note
-    LATCbits.LATC14 = 1; // turn LED on
-    __delay_ms(1000); // delay 1 second
+    play_melody(); // play notes
+    __delay_ms(250); // delay 250 ms
+    set_timer();
 }
 
 void set_timer(void){
-    // 10 second timer - 16e6/16MHz = 10 seconds
-    CCP1PRL = 0x0989; // high bits
-    CCP1PRH = 0x6800; // low bits
+    // 30 second timer - 48e6/16MHz = 30 seconds
+    CCP1CON1Lbits.CCPON = 0; // turn off timer
+    CCP1PRL = 0x3800; // low bits
+    CCP1PRH = 0x1C9C; // high bits
     _CCT1IE = 1; // enable timer interrupt
     CCP1CON1Lbits.CCPON = 1; // enable timer module
 }
@@ -538,4 +580,18 @@ void play_melody(void){
     // housekeeping
     NOTE = temp;
     OCTAVE = temp2;
+}
+
+void __attribute__((interrupt, no_auto_psv)) _ADCAN12Interrupt(void){
+    //interrupt service routine for AN 12 channel
+    //interrupt enables must be set
+	int potentiometer;
+	//get data from appropriate output buffer
+    potentiometer = ADCBUF12;
+	if(potentiometer < 500) VOLUME_DIVIDER = 1;
+	else if(potentiometer > 500 && potentiometer < 3500) VOLUME_DIVIDER = 4;
+	else if(potentiometer > 3500 ) VOLUME_DIVIDER = 0;
+	
+	//reset the flag
+    _ADCAN12IF = 0;
 }
