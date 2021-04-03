@@ -86,13 +86,10 @@ int main(void) {
     
     // Setup 7-segment display
     seven_segment_setup();
-    
-    // Set timer for no user action
-    set_timer();
 
     while(1) {
         
-        if (OCTAVE_BUTTON_1 == 0 || OCTAVE_BUTTON_2 == 0) {
+        if ((OCTAVE_BUTTON_1 == 0 && OCTAVE_BUTTON_2 == 1) || (OCTAVE_BUTTON_1 == 1 && OCTAVE_BUTTON_2 == 0)) {
             if (OCTAVE_BUTTON_1 == 0) {
                 // Octave 1 selected
                 OCTAVE = 1;
@@ -172,7 +169,8 @@ int main(void) {
             PREVIOUS_NOTE = NOTE;
             
             // Reset timer for no user action
-            set_timer();
+            // Trigger Set to 1 - starts timer
+            CCP1STATL = 0x40;
 
         } else {
             // Play nothing
@@ -280,7 +278,21 @@ void pinSetup() {
     CCP1CON1Lbits.CLKSEL = 0;
     // enable timer module
     CCP1CON1Hbits.SYNC = 0;
-    
+    // Set Sync/Triggered mode (Triggered Mode), can be triggered by software or hardware
+    CCP1CON1Hbits.TRIGEN = 1; 
+    // Time base can be retriggered when CCPTRIG = 1, second trigger event occurring during trigger operation will
+    // cause the timer to reset and start counting again.
+    CCP1CON1Hbits.RTRGEN = 1; 
+    // 30 second timer - 48e6/16MHz = 30 seconds
+    CCP1PRL = 0x3800; // Low bits
+    CCP1PRH = 0x1C9C; // High bits
+    // enable timer interrupt
+    _CCT1IE = 1;
+    // enable timer module
+    CCP1CON1Lbits.CCPON = 1;
+    // Trigger Set to 1 - starts timer
+    CCP1STATL = 0x40;
+
     //Setup ADC channel for an_1 pin
     //provide max time for initialization
     ADCON5Hbits.WARMTIME = 15; 
@@ -539,21 +551,10 @@ void make_note(void){
 }
 
 void __attribute__((interrupt, auto_psv)) _CCT1Interrupt(void){
-    // CCT1 ISR
+    CCP1STATL = 0x20; // clear trigger
     _CCT1IF = 0; // interrupt flag cleared
-    CCP1CON1Lbits.CCPON = 0; // turn off timer
-    play_melody(); // play notes
-    __delay_ms(250); // delay 250 ms
-    set_timer();
-}
-
-void set_timer(void){
-    // 30 second timer - 48e6/16MHz = 30 seconds
-    CCP1CON1Lbits.CCPON = 0; // turn off timer
-    CCP1PRL = 0x3800; // low bits
-    CCP1PRH = 0x1C9C; // high bits
-    _CCT1IE = 1; // enable timer interrupt
-    CCP1CON1Lbits.CCPON = 1; // enable timer module
+    play_melody(); // play note
+    CCP1STATL = 0x40; // Trigger Set to 1, start timer again
 }
 
 void play_melody(void){
@@ -589,7 +590,7 @@ void __attribute__((interrupt, no_auto_psv)) _ADCAN12Interrupt(void){
 	//get data from appropriate output buffer
     potentiometer = ADCBUF12;
 	if(potentiometer < 500) VOLUME_DIVIDER = 1;
-	else if(potentiometer > 500 && potentiometer < 3500) VOLUME_DIVIDER = 4;
+	else if(potentiometer > 500 && potentiometer < 3500) VOLUME_DIVIDER = 2;
 	else if(potentiometer > 3500 ) VOLUME_DIVIDER = 0;
 	
 	//reset the flag
